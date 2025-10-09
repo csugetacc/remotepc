@@ -70,7 +70,6 @@ def handle_mouse_control(conn):
     finally:
         conn.close()
 
-
 def server_program():
 
     # initalize sockets
