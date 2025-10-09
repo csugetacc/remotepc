@@ -4,8 +4,12 @@ import cv2
 import struct
 import csv
 
+import json
+from pynput.mouse import Listener as MouseListener, Button
+
 hostname = "linux" # hardcoded laptop IPv4
-port = 5000
+video_port = 5000
+control_port = 5001
 
 # get device ip from csv
 def getip(name, filename = "hosts.csv"):
@@ -29,16 +33,41 @@ def recvall(sock, n):
 def client_program():
 
     host = getip(hostname)
-    
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+
+    # start connections
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as control_socket, \
+         socket.socket(socket.AF_INET, socket.SOCK_STREAM) as video_socket:     
+
+        #mouse portion
+        print(f"Connecting to {host}:{control_port} ...")
+        control_socket.connect((host, control_port))
+
+        def send_mouse(command):
+            try:
+                control_socket.sendall((json.dumps(command) + "\n").encode("utf-8"))
+            except OSError:
+                print("OSError detected")
+                pass
+
+        def on_move(x, y):
+            send_mouse({'type': 'mouse_move', 'value': (x, y)})
+
+        def on_click(x, y, button, pressed):
+            if pressed:
+                send_mouse({'type': 'mouse_click', 'value': 'left' if button == Button.left else 'right'})
+
+        listener = MouseListener(on_move=on_move, on_click=on_click)
+        listener.start()
+
         
-        print(f"Connecting to {host}:{port} ...")
-        client_socket.connect((host, port))
+        # video portion 
+        print(f"Connecting to {host}:{video_port} ...")
+        video_socket.connect((host, video_port))
         print("Connected. Press 'q' to quit.")
 
         while True:
             # read first 4 bytes
-            raw_len = recvall(client_socket, 4)
+            raw_len = recvall(video_socket, 4)
 
             if not raw_len: # if null kill
                 print("Connection closed by server.")
@@ -47,7 +76,7 @@ def client_program():
             (frame_len,) = struct.unpack("!I", raw_len)
 
             # read data
-            payload = recvall(client_socket, frame_len)
+            payload = recvall(video_socket, frame_len)
             if payload is None:
                 print("Connection closed while receiving frame.")
                 break
@@ -63,6 +92,10 @@ def client_program():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
+        # close out 
+        #finally:
+        listener.stop()
         cv2.destroyAllWindows()
+
 
 client_program()
