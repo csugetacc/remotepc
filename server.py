@@ -10,9 +10,9 @@ import threading
 
 from pynput.mouse import Button, Controller as MouseController
 
-host = "0.0.0.0" # listen on all interfaces
-video_port = 5000   # send video on 5000
-control_port = 5001 # send inputs on 5001
+HOST = "0.0.0.0" # listen on all interfaces
+VIDEO_PORT = 5000   # send video on 5000
+CONTROL_PORT = 5001 # send inputs on 5001
 
 mouse = MouseController()
 
@@ -20,6 +20,13 @@ mouse = MouseController()
 FPS = 15
 SCALE = .6
 JPEG_QUALITY = 70
+
+# mouse calculation values initalize
+screen_w = 1
+screen_h = 1
+frame_w = 1
+frame_h = 1
+
 
 
 def screen_grab(sct, scale = SCALE, jpg_q = JPEG_QUALITY):
@@ -41,11 +48,20 @@ def screen_grab(sct, scale = SCALE, jpg_q = JPEG_QUALITY):
     
 
 def mouse_control(command):
+
+    global screen_w, screen_h, frame_w, frame_h     #use global values
     t = command.get('type')
     v = command.get('value')
+
     if t == 'mouse_move':
         x, y = v
-        mouse.position = (int(x), int(y))
+
+        # account for screen size
+        sx = int(x * (screen_w / float(frame_w)))
+        sy = int(y * (screen_h / float(frame_h)))
+
+        mouse.position = (int(sx), int(sy))
+
     elif t == 'mouse_click':
         mouse.click(Button.left if v == 'left' else Button.right, 1)
 
@@ -78,23 +94,23 @@ def server_program():
 
         #control setup
         control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        control_socket.bind((host, control_port))
+        control_socket.bind((HOST, CONTROL_PORT))
         control_socket.listen(1)
         
         # video setup
         video_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        video_socket.bind((host, video_port))
+        video_socket.bind((HOST, VIDEO_PORT))
         video_socket.listen(1)
 
         # control connect
-        print(f"Control listening on {host}:{control_port}")
+        print(f"Control listening on {HOST}:{CONTROL_PORT}")
         control_conn, control_addr = control_socket.accept()
 
         print("Control connection from:", control_addr)
         threading.Thread(target=handle_mouse_control, args=(control_conn,), daemon=True).start()
 
         # video connect
-        print(f"Video listening on {host}:{video_port}")
+        print(f"Video listening on {HOST}:{VIDEO_PORT}")
         video_conn, video_addr = video_socket.accept()
 
         print("Video connection from:", video_addr)
@@ -102,6 +118,19 @@ def server_program():
         with video_conn:
             with mss.mss() as sct:
                 frame_interval = 1.0 / FPS
+
+                mon = sct.monitors[1]   #only main monitor for now 
+
+                # get screen size
+                screen_w = mon['width']
+                screen_h = mon['height']
+                frame_w = int(screen_w * SCALE)
+                frame_h = int(screen_h * SCALE)
+
+                # share screen size 
+                global screen_w, screen_h, frame_w, frame_h
+                screen_w, screen_h = screen_w, screen_h
+                frame_w, frame_h = frame_w, frame_h
 
                 while True:
                     t0 = time.time()
