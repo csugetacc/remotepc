@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import struct
 import csv
-
+import threading
 import json
 from pynput.mouse import Listener as MouseListener, Button
 
@@ -32,7 +32,12 @@ def recvall(sock, n):
 
 def client_program():
 
-    host = getip(hostname)
+    host = getip(hostname)  # host ip
+
+    # initalize for mouse window acounting
+    window_dims = {'x': 0, 'y': 0, 'w': 1, 'h': 1}
+    frame_dims  = {'w': 1, 'h': 1}
+    state_lock = threading.Lock()
 
     # start connections
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as control_socket, \
@@ -50,7 +55,21 @@ def client_program():
                 pass
 
         def on_move(x, y):
-            send_mouse({'type': 'mouse_move', 'value': (x, y)})
+
+            # calculate for mouse in window
+            with state_lock:
+                wx, wy, ww, wh = window_dims['x'], window_dims['y'], window_dims['w'], window_dims['h']
+                fw, fh = frame_dims['w'], frame_dims['h']
+
+            frame_x = x - wx
+            frame_y = y - wy
+
+            if 0 <= frame_x < ww and 0 <= frame_y < wh:   # only send when in window 
+                # scale to frame resolution
+                adjusted_x = frame_x * (fw / float(ww))
+                adjusted_y = frame_y * (fh / float(wh))
+
+                send_mouse({'type': 'mouse_move', 'value': (int(adjusted_x), int(adjusted_y))})
 
         def on_click(x, y, button, pressed):
             if pressed:
@@ -60,10 +79,12 @@ def client_program():
         listener.start()
 
         
-        # video portion 
+        # video connection 
         print(f"Connecting to {host}:{video_port} ...")
         video_socket.connect((host, video_port))
         print("Connected. Press 'q' to quit.")
+
+        cv2.namedWindow("Remote Screen", cv2.WINDOW_NORMAL) # start window
 
         while True:
             # read first 4 bytes
@@ -86,7 +107,19 @@ def client_program():
             frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if frame is None:
                 continue
+                
             cv2.imshow("Remote Screen", frame)
+
+            # get window dimensions for mouse calculations
+            h, w = frame.shape[:2]
+            with state_lock:
+                frame_dims['w'], frame_dims['h'] = w, h     # update frame values
+                try:
+                    wx, wy, ww, wh = cv2.getWindowImageRect("Remote Screen")
+                    window_dims.update({'x': wx, 'y': wy, 'w': ww, 'h': wh})    # update window values 
+                except Exception:
+                    pass
+
             
             # close connection
             if cv2.waitKey(1) & 0xFF == ord('q'):
