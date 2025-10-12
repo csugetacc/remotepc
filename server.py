@@ -4,31 +4,32 @@ import numpy as np
 import cv2
 import struct
 import time 
-
 import json
 import threading 
 
 from pynput.mouse import Button, Controller as MouseController
+from pynput.keyboard import Controller as KeyboardController, Key as Key
 
 HOST = "0.0.0.0" # listen on all interfaces
 VIDEO_PORT = 5000   # send video on 5000
 CONTROL_PORT = 5001 # send inputs on 5001
 
 mouse = MouseController()
+keyboard = KeyboardController()
 
 # set values for streaming 
 FPS = 15
 SCALE = .6
 JPEG_QUALITY = 70
 
-# mouse calculation values initalize
+# initalize mouse calculation values 
 screen_w = 1
 screen_h = 1
 frame_w = 1
 frame_h = 1
 
 
-
+# get screen frame to send
 def screen_grab(sct, scale = SCALE, jpg_q = JPEG_QUALITY):
 
     mon = sct.monitors[1]  # primary display
@@ -65,6 +66,23 @@ def mouse_control(command):
     elif t == 'mouse_click':
         mouse.click(Button.left if v == 'left' else Button.right, 1)
 
+    # keyboard controlls are going in here for now 
+    elif t == 'key_down':
+        key = handle_keyboard_control(v)
+        try:
+            keyboard.press(key)
+        except ValueError:
+            # ignore keys pynput cant press
+            pass
+
+    elif t == 'key_up':
+        key = handle_keyboard_control(v)
+        try:
+            keyboard.release(key)
+        except ValueError:
+            pass
+
+
 def handle_mouse_control(conn):
     buf = b""
     try:
@@ -85,6 +103,22 @@ def handle_mouse_control(conn):
                     pass
     finally:
         conn.close()
+
+def handle_keyboard_control(name: str):
+    # try special keys
+    try:
+        return getattr(Key, name)
+    except AttributeError:
+        pass
+    # try function keys
+    if name.startswith('f') and name[1:].isdigit():
+        try:
+            return getattr(Key, name)
+        except AttributeError:
+            pass
+    # else treat as literal character
+    return name
+
 
 def server_program():
 
@@ -107,7 +141,7 @@ def server_program():
         control_conn, control_addr = control_socket.accept()
 
         print("Control connection from:", control_addr)
-        threading.Thread(target=handle_mouse_control, args=(control_conn,), daemon=True).start()
+        threading.Thread(target=handle_mouse_control, args=(control_conn,), daemon=True).start() # handle controls in seperate thread
 
         # video connect
         print(f"Video listening on {HOST}:{VIDEO_PORT}")
@@ -121,6 +155,8 @@ def server_program():
 
                 mon = sct.monitors[1]   #only main monitor for now 
 
+                global screen_w, screen_h, frame_w, frame_h     # use global values
+
                 # get screen size
                 screen_w = mon['width']
                 screen_h = mon['height']
@@ -128,7 +164,6 @@ def server_program():
                 frame_h = int(screen_h * SCALE)
 
                 # share screen size 
-                global screen_w, screen_h, frame_w, frame_h
                 screen_w, screen_h = screen_w, screen_h
                 frame_w, frame_h = frame_w, frame_h
 
