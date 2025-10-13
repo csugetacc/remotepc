@@ -8,7 +8,6 @@ import json
 from pynput.mouse import Listener as MouseListener, Button
 from pynput.keyboard import Listener as KeyboardListener, Key
 
-hostname = "linux" # hardcoded laptop IPv4
 video_port = 5000
 control_port = 5001
 
@@ -33,7 +32,10 @@ def recvall(sock, n):
 
 def client_program():
 
-    host = getip(hostname)  # host ip
+    # get host ipv4
+    hostname = input("Enter device name: ")
+    host = getip(hostname)  
+
     pressed_keys = set() # stores keystrokes to send
 
     # initalize for mouse window acounting
