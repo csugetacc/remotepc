@@ -73,7 +73,9 @@ def client_program():
 
         def on_click(x, y, button, pressed):
             if pressed:
-                send_mouse({'type': 'mouse_click', 'value': 'left' if button == Button.left else 'right'})
+                send_mouse({'type': 'mouse_down', 'value': 'left' if button == Button.left else 'right'})
+            else:   # register click release
+                send_mouse({'type': 'mouse_up', 'value': 'left' if button == Button.left else 'right'})    
 
         # keyboard functions
         def key_to_name(key):
