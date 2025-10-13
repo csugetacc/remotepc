@@ -63,8 +63,11 @@ def mouse_control(command):
 
         mouse.position = (int(sx), int(sy))
 
-    elif t == 'mouse_click':
-        mouse.click(Button.left if v == 'left' else Button.right, 1)
+    elif t == 'mouse_down':
+        mouse.press(Button.left if v == 'left' else Button.right)
+    
+    elif t == 'mouse_up':
+        mouse.release(Button.left if v == 'left' else Button.right)
 
     # keyboard controlls are going in here for now 
     elif t == 'key_down':
