@@ -186,6 +186,3 @@ def server_program():
                     sleep = frame_interval - elapsed
                     if sleep > 0:
                         time.sleep(sleep)
-
-server_program()
-

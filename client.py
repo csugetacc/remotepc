@@ -8,8 +8,18 @@ import json
 from pynput.mouse import Listener as MouseListener, Button
 from pynput.keyboard import Listener as KeyboardListener, Key
 
+#import sys
+from PySide6 import QtCore, QtWidgets, QtGui
+
 video_port = 5000
 control_port = 5001
+
+# convert opencv frame to qt image 
+def frame_to_qimage(frame_bgr: np.ndarray) -> QtGui.QImage:
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    h, w, ch = rgb.shape
+    return QtGui.QImage(rgb.data, w, h, ch * w, QtGui.QImage.Format_RGB888)
+
 
 # get device ip from csv
 def getip(name, filename = "hosts.csv"):
@@ -21,6 +31,7 @@ def getip(name, filename = "hosts.csv"):
                 if csv_name == name:
                     return ip
 
+
 def recvall(sock, n):
     data = bytearray()
     while len(data) < n:
@@ -30,11 +41,17 @@ def recvall(sock, n):
         data.extend(packet)
     return bytes(data)
 
-def client_program():
+
+def client_program(hostname):
 
     # get host ipv4
-    hostname = input("Enter device name: ")
+    #hostname = input("Enter device name: ")
     host = getip(hostname)  
+
+    # temporary catch for bad hostname 
+    if not host:
+        print("invalid host entered")
+        exit()
 
     pressed_keys = set() # stores keystrokes to send
 
@@ -163,6 +180,3 @@ def client_program():
         listener.stop()
         key_listener.stop()
         cv2.destroyAllWindows()
-
-
-client_program()
