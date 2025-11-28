@@ -10,6 +10,8 @@ import threading
 from pynput.mouse import Button, Controller as MouseController
 from pynput.keyboard import Controller as KeyboardController, Key as Key
 
+import encrypt
+
 HOST = "0.0.0.0" # listen on all interfaces
 VIDEO_PORT = 5000   # send video on 5000
 CONTROL_PORT = 5001 # send inputs on 5001
@@ -86,26 +88,18 @@ def mouse_control(command):
             pass
 
 
-def handle_mouse_control(conn):
-    buf = b""
+def handle_mouse_control(control_conn, PSK):
     try:
         while True:
-            chunk = conn.recv(4096)
-            if not chunk:
+            cmd = encrypt.recv_json(control_conn, PSK)
+
+            if cmd is None: # catch bad recv 
                 break
-            buf += chunk
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                if not line:
-                    continue
-                try:
-                    cmd = json.loads(line.decode("utf-8"))
-                    mouse_control(cmd)
-                except json.JSONDecodeError:
-                    # ignore malformed lines
-                    pass
+                
+            mouse_control(cmd)
     finally:
-        conn.close()
+        control_conn.close() 
+
 
 def handle_keyboard_control(name: str):
     # try special keys
@@ -124,6 +118,9 @@ def handle_keyboard_control(name: str):
 
 
 def server_program():
+
+    # load key
+    PSK = encrypt.load_key()
 
     # initalize sockets
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as control_socket, \
@@ -144,7 +141,7 @@ def server_program():
         control_conn, control_addr = control_socket.accept()
 
         print("Control connection from:", control_addr)
-        threading.Thread(target=handle_mouse_control, args=(control_conn,), daemon=True).start() # handle controls in seperate thread
+        threading.Thread(target=handle_mouse_control, args=(control_conn, PSK), daemon=True).start() # handle controls in seperate thread
 
         # video connect
         print(f"Video listening on {HOST}:{VIDEO_PORT}")
@@ -177,9 +174,7 @@ def server_program():
                     if data is None:
                         continue
 
-                    # send prefix + payload
-                    video_conn.sendall(struct.pack("!I", len(data)))
-                    video_conn.sendall(data)
+                    encrypt.send_sealed(video_conn, PSK, data, aad=b"video")
 
                     # throttle FPS
                     elapsed = time.time() - t0

@@ -25,12 +25,14 @@ class ClientPage(QtWidgets.QWidget):
         self.video_box.setAlignment(QtCore.Qt.AlignCenter)
         self.video_box.setStyleSheet("background:#111; color:#aaa;")
         self.video_box.setText("Video feed will appear here")
+        self.video_box.setMouseTracking(True)       # track mouse within video box
+        self.video_box.setFocusPolicy(QtCore.Qt.StrongFocus)    # set keyboard focus
+        self.video_box.installEventFilter(self)     # allows intercepting inputs 
         
         # align host text and input box
         self.host_line = QtWidgets.QHBoxLayout()
         self.host_line.addWidget(self.host_label)
         self.host_line.addWidget(self.set_host)
-
 
         # page layout 
         self.layout = QtWidgets.QVBoxLayout(self)
@@ -45,14 +47,151 @@ class ClientPage(QtWidgets.QWidget):
 
     # runs client program in seperate thread
     def start_client(self):
+        
         name = self.set_host.text().strip()
 
+        # check inputed device name
         if not name:
             QtWidgets.QMessageBox.warning(self, "Missing name", "Enter a host device name.")
             return
 
-        client_thread = threading.Thread(target=client.client_program, args=(name,), daemon=True)
-        client_thread.start()
+        # convert name to ip  
+        ip = client.getip(name)
+
+        # check if ip exists 
+        if not ip:
+            QtWidgets.QMessageBox.warning(self, "Unknown host", f"No IP found for '{name}' in hosts.csv")
+            return
+
+        # create qthread and client worker objects
+        self.client_thread = QtCore.QThread(self)   # for event loop container
+        self.client_worker = client.ClientWorker(ip)    # for networking loop
+
+        # move worker to run in the client thread
+        self.client_worker.moveToThread(self.client_thread)
+
+        # connect signals
+        self.client_thread.started.connect(self.client_worker.start)
+        self.client_worker.frameReady.connect(self.Qt_frame)
+        self.client_worker.statusText.connect(self.video_box_status_text)
+        self.client_worker.closed.connect(self.close_client)
+
+        # shutdown
+        self.client_thread.finished.connect(self.client_thread.deleteLater)
+
+        # start thread
+        self.client_thread.start()
+
+
+    def eventFilter(self, obj, event):
+
+        if obj is self.video_box and hasattr(self, "client_worker"):
+
+            mouse_event = event.type()
+
+            # collect mose movement
+            if mouse_event == QtCore.QEvent.MouseMove:   
+                pos = event.globalPosition().toPoint()
+                self.client_worker.mouse_move(pos.x(), pos.y())
+                
+            # collect mouse click
+            elif mouse_event == QtCore.QEvent.MouseButtonPress:
+                button = event.button()
+                which = 'left' if button == QtCore.Qt.LeftButton else 'right'
+                self.client_worker.mouse_click(which)
+                self.video_box.setFocus()   # sets focus for keys
+
+            # collect mouse release
+            elif mouse_event == QtCore.QEvent.MouseButtonRelease:
+                button = event.button()
+                which = 'left' if button == QtCore.Qt.LeftButton else 'right'
+                self.client_worker.mouse_release(which)
+
+        return super().eventFilter(obj, event)
+
+
+    # display qimage as pixmap 
+    @QtCore.Slot(QtGui.QImage)
+    def Qt_frame(self, qimg: QtGui.QImage):
+
+        self.video_box.setPixmap(QtGui.QPixmap.fromImage(qimg))     # set up display
+
+        # collect video box dimensions
+        top_left = self.video_box.mapToGlobal(QtCore.QPoint(0, 0))  
+        w = self.video_box.width()
+        h = self.video_box.height()
+
+        if hasattr(self, "client_worker"):  # prevent attribute error crash
+            self.client_worker.set_window_rect(top_left.x(), top_left.y(), w, h)
+
+
+    # changes status text for video box 
+    @QtCore.Slot(str)
+    def video_box_status_text(self, text: str):
+        if text:
+            self.video_box.setText(text)
+
+
+    # close out client
+    @QtCore.Slot()
+    def close_client(self):
+        if self.client_thread.isRunning() and hasattr(self, "client_thread"):
+            self.client_thread.quit()
+            self.client_thread.wait(500)
+
+    
+    # remap special keys
+    Qt_key = {
+        QtCore.Qt.Key_Escape:   'esc',
+        QtCore.Qt.Key_Tab:      'tab',
+        QtCore.Qt.Key_Backspace:'backspace',
+        QtCore.Qt.Key_Return:   'enter',
+        QtCore.Qt.Key_Enter:    'enter',
+        QtCore.Qt.Key_Space:    'space',
+        QtCore.Qt.Key_Left:     'left',
+        QtCore.Qt.Key_Right:    'right',
+        QtCore.Qt.Key_Up:       'up',
+        QtCore.Qt.Key_Down:     'down',
+        QtCore.Qt.Key_Shift:    'shift',
+        QtCore.Qt.Key_Control:  'ctrl',
+        QtCore.Qt.Key_Alt:      'alt',
+        QtCore.Qt.Key_Meta:     'cmd',
+    }
+
+    def key_to_name(self, event: QtGui.QKeyEvent) -> str | None:
+
+        if event.isAutoRepeat():    # ignore auto repeats 
+            return None
+
+        key = event.key()
+
+        # basic inputs
+        ch = event.text()
+        if ch:
+            return ch if len(ch) > 1 else ch.lower()     # standardize keys
+
+        # remap special keys using legend 
+        if key in Qt_key:
+            return Qt_key[k]
+
+        # function keys
+        if QtCore.Qt.Key_F1 <= key <= QtCore.Qt.Key_F24:
+            name = key - QtCore.Qt.Key_F1 + 1
+            return f"f{name}"
+
+        return None
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent):
+        if hasattr(self, "client_worker"):
+            name = self.key_to_name(event)
+            if name:
+                self.client_worker.key_press(name)
+
+    def keyReleaseEvent(self, event: QtGui.QKeyEvent):
+        if hasattr(self, "client_worker"):
+            name = self.key_to_name(event)
+            if name:
+                self.client_worker.key_release(name)
 
 
 # page for running server function
@@ -107,7 +246,6 @@ class ServerPage(QtWidgets.QWidget):
             "Stop server not implemented"
         )
         self.stop_button.setEnabled(False)     
-
 
 
 # main page
