@@ -147,6 +147,7 @@ class ClientPage(QtWidgets.QWidget):
         QtCore.Qt.Key_Backspace:'backspace',
         QtCore.Qt.Key_Return:   'enter',
         QtCore.Qt.Key_Enter:    'enter',
+        QtCore.Qt.Key_Delete:   'delete',
         QtCore.Qt.Key_Space:    'space',
         QtCore.Qt.Key_Left:     'left',
         QtCore.Qt.Key_Right:    'right',
@@ -165,14 +166,14 @@ class ClientPage(QtWidgets.QWidget):
 
         key = event.key()
 
+        # remap special keys using legend 
+        if key in self.Qt_key:
+            return self.Qt_key[key]
+
         # basic inputs
         ch = event.text()
         if ch:
             return ch if len(ch) > 1 else ch.lower()     # standardize keys
-
-        # remap special keys using legend 
-        if key in Qt_key:
-            return Qt_key[k]
 
         # function keys
         if QtCore.Qt.Key_F1 <= key <= QtCore.Qt.Key_F24:
