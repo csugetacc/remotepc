@@ -28,6 +28,9 @@ class ClientPage(QtWidgets.QWidget):
         self.video_box.setMouseTracking(True)       # track mouse within video box
         self.video_box.setFocusPolicy(QtCore.Qt.StrongFocus)    # set keyboard focus
         self.video_box.installEventFilter(self)     # allows intercepting inputs 
+        self.video_box.setScaledContents(True)    # allow resizeing image
+        self.video_box.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)  # unlock horizontal and vertical axsises 
+
         
         # align host text and input box
         self.host_line = QtWidgets.QHBoxLayout()
@@ -114,7 +117,10 @@ class ClientPage(QtWidgets.QWidget):
     @QtCore.Slot(QtGui.QImage)
     def Qt_frame(self, qimg: QtGui.QImage):
 
-        self.video_box.setPixmap(QtGui.QPixmap.fromImage(qimg))     # set up display
+        # set up display
+        pixmap = QtGui.QPixmap.fromImage(qimg)
+        scaled = pixmap.scaled(self.video_box.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)    # scale video to window size
+        self.video_box.setPixmap(scaled)     
 
         # collect video box dimensions
         top_left = self.video_box.mapToGlobal(QtCore.QPoint(0, 0))  
