@@ -1,5 +1,9 @@
 import sys
 import threading
+import os
+import csv
+import socket
+
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import client
@@ -13,8 +17,15 @@ class ClientPage(QtWidgets.QWidget):
 
         self.stacked_widget = stacked_widget
 
+        # hostname input
         self.host_label = QtWidgets.QLabel("Host: ")
         self.set_host = QtWidgets.QLineEdit()
+
+        # public/private ip sellect
+        self.ip_type_label = QtWidgets.QLabel("IP type: ")
+        self.ip_type_menue = QtWidgets.QComboBox()
+        self.ip_type_menue.addItems(["Auto", "Private", "Public"])
+
         self.button = QtWidgets.QPushButton("Connect")
 
         self.back_button = QtWidgets.QPushButton("Back")
@@ -37,11 +48,17 @@ class ClientPage(QtWidgets.QWidget):
         self.host_line.addWidget(self.host_label)
         self.host_line.addWidget(self.set_host)
 
+        # aling ip type info
+        self.ip_type_line = QtWidgets.QHBoxLayout()
+        self.ip_type_line.addWidget(self.ip_type_label)
+        self.ip_type_line.addWidget(self.ip_type_menue)
+
         # page layout 
         self.layout = QtWidgets.QVBoxLayout(self)
         self.layout.addWidget(self.back_button, alignment = QtCore.Qt.AlignRight)
         self.layout.addWidget(self.video_box)
         self.layout.addLayout(self.host_line)
+        self.layout.addLayout(self.ip_type_line)
         self.layout.addWidget(self.button)
 
         # button presses
@@ -58,8 +75,17 @@ class ClientPage(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Missing name", "Enter a host device name.")
             return
 
+        # adjust to user preference 
+        mode = self.ip_type_menue.currentText()
+        if mode == "Private":
+            use_public = False
+        elif mode == "Public":
+            use_public = True
+        else:
+            use_public = None
+
         # convert name to ip  
-        ip = client.getip(name)
+        ip = client.getip(name, use_public = use_public)
 
         # check if ip exists 
         if not ip:
@@ -255,6 +281,151 @@ class ServerPage(QtWidgets.QWidget):
         self.stop_button.setEnabled(False)     
 
 
+# devices page
+class DevicePage(QtWidgets.QWidget):
+    def __init__(self, stacked_widget):
+        super().__init__()
+
+        self.stacked_widget = stacked_widget
+
+        # buttons
+        self.back_button = QtWidgets.QPushButton("Back")
+        self.back_button.setFixedSize(80, 30)
+
+        self.title = QtWidgets.QLabel("Devices", alignment=QtCore.Qt.AlignCenter)
+
+        top_line = QtWidgets.QHBoxLayout()
+        top_line.addWidget(self.back_button, alignment=QtCore.Qt.AlignRight)
+        top_line.addStretch()
+        top_line.addWidget(self.title)
+        top_line.addStretch()
+
+        # csv table
+        self.table = QtWidgets.QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Hostname", "Private IP", "Public IP"])
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+
+        # display local device info
+        self.local_private = self.get_local_private_ip()
+        self.local_public = self.get_local_public_ip()
+        local_private_text = self.local_private if self.local_private else "unknown"
+        local_public_text = self.local_public if self.local_public else "unknown"
+        self.local_label = QtWidgets.QLabel(f"This device - Private: {local_private_text}   Public: {local_public_text}")
+
+        self.name_input = QtWidgets.QLineEdit()
+        self.private_input = QtWidgets.QLineEdit()
+        self.public_input = QtWidgets.QLineEdit()
+
+        ip_box = QtWidgets.QFormLayout()
+        ip_box.addRow("Hostname:", self.name_input)
+        ip_box.addRow("Private IP:", self.private_input)
+        ip_box.addRow("Public IP:", self.public_input)
+
+        self.ip_button = QtWidgets.QPushButton("Use local IP")
+        self.add_button = QtWidgets.QPushButton("Add device")
+        self.refresh_button = QtWidgets.QPushButton("Refresh")
+
+        buttons_line = QtWidgets.QHBoxLayout()
+        buttons_line.addWidget(self.ip_button)
+        buttons_line.addWidget(self.add_button)
+        buttons_line.addWidget(self.refresh_button)
+
+        # page layout 
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addLayout(top_line)
+        layout.addWidget(self.table)
+        layout.addWidget(self.local_label)
+        layout.addLayout(ip_box)
+        layout.addLayout(buttons_line)
+
+        # connect signals
+        self.back_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
+        self.ip_button.clicked.connect(self.fill_local_ips)
+        self.add_button.clicked.connect(self.add_device)
+        self.refresh_button.clicked.connect(self.load_devices)
+
+        # initial load
+        self.load_devices()
+
+    # load info from hosts.csv
+    def load_devices(self):
+        self.table.setRowCount(0)
+
+        if not os.path.exists("hosts.csv"):
+            return
+
+        with open("hosts.csv", newline="") as host_file:
+            reader = csv.DictReader(host_file)
+
+            for row_idx, row in enumerate(reader):      # get row value and index
+                self.table.insertRow(row_idx)
+
+                for col, key in enumerate(("hostname", "privateip", "publicip")):   
+                    value = row.get(key, "")    # convert key to readable value
+                    item = QtWidgets.QTableWidgetItem(value)
+                    self.table.setItem(row_idx, col, item)
+
+    # add device to hosts.csv
+    def add_device(self):
+
+        # get values from user
+        name = self.name_input.text().strip()
+        private_ip = self.private_input.text().strip()
+        public_ip = self.public_input.text().strip()
+
+        # warn if no name inputed (no ip ok)
+        if not name:
+            QtWidgets.QMessageBox.warning(self, "Missing hostname", "Enter a hostname.")
+            return
+
+        # set value if the csv has not been setup
+        new_file = not os.path.exists("hosts.csv")
+
+        # open or create file
+        with open("hosts.csv", "a", newline="") as host_file:
+            writer = csv.writer(host_file)
+
+            # add headder
+            if new_file:
+                writer.writerow(["hostname", "privateip", "publicip"])
+            
+            # write inputed values
+            writer.writerow([name, private_ip, public_ip])
+
+        # clear and load inputs
+        self.name_input.clear()
+        self.private_input.clear()
+        self.public_input.clear()
+        self.load_devices()
+
+    # populate ip fields
+    def fill_local_ips(self):
+        self.private_input.setText(self.local_private or "")
+        self.public_input.setText(self.local_public or "")
+
+    # best guess at local ip
+    @staticmethod
+    def get_local_private_ip() -> str:
+
+        try:
+            # Source - https://stackoverflow.com/a
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+            s.close()
+                
+        except OSError:     # if this errors print a blank
+            return 
+
+    # not implemented 
+    @staticmethod
+    def get_local_public_ip() -> str:
+        return 
+
+
 # main page
 class MainMenu(QtWidgets.QWidget):
     def __init__(self, stacked_widget):
@@ -262,10 +433,21 @@ class MainMenu(QtWidgets.QWidget):
 
         self.stacked_widget = stacked_widget
 
+        self.device_button = QtWidgets.QPushButton("Devices")
+        self.device_button.setFixedSize(80, 30)
+        self.settings_button = QtWidgets.QPushButton("Settings")
+        self.settings_button.setFixedSize(80, 30)
+
+        self.top_line = QtWidgets.QHBoxLayout()
+        self.top_line.addWidget(self.device_button, alignment=QtCore.Qt.AlignLeft)
+        self.top_line.addStretch()
+        self.top_line.addWidget(self.settings_button)
+        self.top_line.addStretch()
+
         self.title = QtWidgets.QLabel("Select Mode", alignment=QtCore.Qt.AlignCenter)
         self.title.setStyleSheet("font-size: 24px; margin-bottom: 20px;")
 
-        # buttons
+        # center buttons
         self.client_button = QtWidgets.QPushButton("Client")
         self.client_button.setFixedSize(200, 50)
         self.server_button = QtWidgets.QPushButton("Server")
@@ -273,6 +455,7 @@ class MainMenu(QtWidgets.QWidget):
 
         # page layout
         self.layout = QtWidgets.QVBoxLayout(self)
+        self.layout.addLayout(self.top_line)
         self.layout.setAlignment(QtCore.Qt.AlignCenter)
         self.layout.addWidget(self.title)
         self.layout.addWidget(self.client_button)
@@ -281,6 +464,7 @@ class MainMenu(QtWidgets.QWidget):
         # button presses
         self.client_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(1))
         self.server_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(2))
+        self.device_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(3))
 
 
 if __name__ == "__main__":
@@ -291,11 +475,13 @@ if __name__ == "__main__":
     main_menu = MainMenu(stacked_widget)
     client_page = ClientPage(stacked_widget)
     server_page = ServerPage(stacked_widget)
+    device_page = DevicePage(stacked_widget)
 
     # pages 
     stacked_widget.addWidget(main_menu)     # 0
     stacked_widget.addWidget(client_page)   # 1
     stacked_widget.addWidget(server_page)   # 2
+    stacked_widget.addWidget(device_page)   # 3
 
     stacked_widget.setCurrentIndex(0)   # start on main_menue page
     stacked_widget.resize(800, 600)

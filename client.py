@@ -159,14 +159,34 @@ def frame_to_qimage(frame_bgr: np.ndarray) -> QtGui.QImage:
 
 
 # get device ip from csv
-def getip(name, filename = "hosts.csv"):
-    with open(filename, newline="") as csvfile:
-        for row in csv.reader(csvfile):
-            if len(row) >= 2:
-                csv_name = row[0].strip()
-                ip = row[1].strip()
-                if csv_name == name:
-                    return ip
+def getip(name, use_public: bool | None = None):
+
+    with open("hosts.csv", newline="") as csvfile:
+        for row in csv.DictReader(csvfile):
+
+            csv_name = row.get("hostname", "").strip()
+            if csv_name != name:    # loop untill correct index
+                continue
+
+            private_ip = (row.get("privateip") or "").strip() or None
+            public_ip  = (row.get("publicip") or "").strip() or None
+
+            '''
+            return the desired ip if avalible else return whats avalible 
+            prioritize private if user does not select
+            '''
+            if use_public is True:
+                return public_ip or private_ip
+            elif use_public is False:
+                return private_ip or public_ip
+            else:   
+                return private_ip or public_ip
+
+    return None     # ip not found
+
+
+
+
 
 ''' outdated
 def recvall(sock, n):
