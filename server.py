@@ -19,11 +19,6 @@ CONTROL_PORT = 5001 # send inputs on 5001
 mouse = MouseController()
 keyboard = KeyboardController()
 
-# set values for streaming 
-FPS = 15
-SCALE = .6
-JPEG_QUALITY = 70
-
 # initalize mouse calculation values 
 screen_w = 1
 screen_h = 1
@@ -32,16 +27,16 @@ frame_h = 1
 
 
 # get screen frame to send
-def screen_grab(sct, scale = SCALE, jpg_q = JPEG_QUALITY):
+def screen_grab(sct, scale, jpg_q):
 
     mon = sct.monitors[1]  # primary display
     img = np.array(sct.grab(mon))
     frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
     # downscale
-    if SCALE != 1.0:
+    if scale != 1.0:
         h, w = frame.shape[:2]
-        frame = cv2.resize(frame, (int(w*SCALE), int(h*SCALE)), interpolation=cv2.INTER_AREA)
+        frame = cv2.resize(frame, (int(w*scale), int(h*scale)), interpolation=cv2.INTER_AREA)
 
     # JPEG encode
     ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
@@ -117,7 +112,7 @@ def handle_keyboard_control(name: str):
     return name
 
 
-def server_program():
+def server_program(FPS, scale, jepg_q):
 
     # load key
     PSK = encrypt.load_key()
@@ -160,8 +155,8 @@ def server_program():
                 # get screen size
                 screen_w = mon['width']
                 screen_h = mon['height']
-                frame_w = int(screen_w * SCALE)
-                frame_h = int(screen_h * SCALE)
+                frame_w = int(screen_w * scale)
+                frame_h = int(screen_h * scale)
 
                 # share screen size 
                 screen_w, screen_h = screen_w, screen_h
@@ -170,7 +165,7 @@ def server_program():
                 while True:
                     t0 = time.time()
 
-                    data = screen_grab(sct)
+                    data = screen_grab(sct, scale, jepg_q)
                     if data is None:
                         continue
 

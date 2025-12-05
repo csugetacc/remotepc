@@ -9,6 +9,12 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import client
 import server
 
+# set values for streaming 
+FPS = 15
+SCALE = .6
+JPEG_QUALITY = 70
+
+
 # page for running client program 
 class ClientPage(QtWidgets.QWidget):
 
@@ -263,8 +269,8 @@ class ServerPage(QtWidgets.QWidget):
     # run server program in seperate thread
     def start_server(self):
 
-        self._server_thread = threading.Thread(target=server.server_program, daemon=True)
-        self._server_thread.start()
+        self.server_thread = threading.Thread(target=server.server_program, daemon=True, args=(FPS, SCALE, JPEG_QUALITY))
+        self.server_thread.start()
         self.status.setText("Server listening on 0.0.0.0:5000/5001...")
 
         # swap presed button
@@ -426,6 +432,70 @@ class DevicePage(QtWidgets.QWidget):
         return 
 
 
+class SettingsPage(QtWidgets.QWidget):
+    def __init__(self, stacked_widget):
+        super().__init__()
+
+        self.stacked_widget = stacked_widget
+
+        # buttons
+        self.back_button = QtWidgets.QPushButton("Back")
+        self.back_button.setFixedSize(80, 30)
+
+        self.top_line = QtWidgets.QHBoxLayout()
+        self.top_line.addWidget(self.back_button, alignment=QtCore.Qt.AlignLeft)
+        self.top_line.addStretch()
+
+        self.title = QtWidgets.QLabel("Settings", alignment=QtCore.Qt.AlignCenter)
+
+        self.resolution_menue = QtWidgets.QComboBox()
+
+        # options for resolution scale
+        self.resolution_options = [
+            ("High (1.0x - full)", 1.0),
+            ("Medium (0.75x)", 0.75),
+            ("Low (0.5x)", 0.5),
+            ("Very Low (0.25x)", 0.25),
+        ]
+        for label, _ in self.resolution_options:
+            self.resolution_menue.addItem(label)
+
+        # spin box for fps value
+        self.fps_spin = QtWidgets.QSpinBox()
+        self.fps_spin.setRange(5, 60)
+        self.fps_spin.setSingleStep(5)  # ammount the arrows move value
+
+        form = QtWidgets.QFormLayout()
+        form.addRow("Resolution scale:", self.resolution_menue)
+        form.addRow("Framerate (FPS):", self.fps_spin)
+
+        self.save_button = QtWidgets.QPushButton("Save")
+
+        self.layout = QtWidgets.QVBoxLayout(self)
+        self.layout.addLayout(self.top_line)
+        self.layout.addWidget(self.title)
+        self.layout.addLayout(form)
+        self.layout.addStretch()
+        self.layout.addWidget(self.save_button, alignment=QtCore.Qt.AlignCenter)
+
+        # connect signals
+        self.back_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
+        self.save_button.clicked.connect(self.apply_settings)
+
+    # update settings with user input
+    def apply_settings(self):
+
+        # get user input 
+        _, scale = self.resolution_options[self.resolution_menue.currentIndex()]
+        fps = self.fps_spin.value()
+
+        # update values
+        SCALE = float(scale)
+        FPS = int(fps)
+
+        QtWidgets.QMessageBox.information(self, "Settings saved", "New settings will be applied on next server start.")
+
+
 # main page
 class MainMenu(QtWidgets.QWidget):
     def __init__(self, stacked_widget):
@@ -465,6 +535,7 @@ class MainMenu(QtWidgets.QWidget):
         self.client_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(1))
         self.server_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(2))
         self.device_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(3))
+        self.settings_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(4))
 
 
 if __name__ == "__main__":
@@ -476,12 +547,14 @@ if __name__ == "__main__":
     client_page = ClientPage(stacked_widget)
     server_page = ServerPage(stacked_widget)
     device_page = DevicePage(stacked_widget)
+    settings_page = SettingsPage(stacked_widget)
 
     # pages 
     stacked_widget.addWidget(main_menu)     # 0
     stacked_widget.addWidget(client_page)   # 1
     stacked_widget.addWidget(server_page)   # 2
     stacked_widget.addWidget(device_page)   # 3
+    stacked_widget.addWidget(settings_page) # 4
 
     stacked_widget.setCurrentIndex(0)   # start on main_menue page
     stacked_widget.resize(800, 600)
