@@ -27,6 +27,8 @@ class ClientPage(QtWidgets.QWidget):
         self.host_label = QtWidgets.QLabel("Host: ")
         self.set_host = QtWidgets.QLineEdit()
 
+        self.transfer_file = QtWidgets.QPushButton("Transfer Files")
+
         # public/private ip sellect
         self.ip_type_label = QtWidgets.QLabel("IP type: ")
         self.ip_type_menue = QtWidgets.QComboBox()
@@ -58,6 +60,13 @@ class ClientPage(QtWidgets.QWidget):
         self.ip_type_line = QtWidgets.QHBoxLayout()
         self.ip_type_line.addWidget(self.ip_type_label)
         self.ip_type_line.addWidget(self.ip_type_menue)
+        self.ip_type_line.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))        
+        self.ip_type_line.addWidget(self.transfer_file)    # shoving this here
+        # fix spacing of these items
+        self.ip_type_line.setStretch(0, 0)
+        self.ip_type_line.setStretch(1, 1)
+        self.ip_type_line.setStretch(2, 1)
+        self.ip_type_line.setStretch(3, 1)
 
         # page layout 
         self.layout = QtWidgets.QVBoxLayout(self)
@@ -300,12 +309,6 @@ class DevicePage(QtWidgets.QWidget):
 
         self.title = QtWidgets.QLabel("Devices", alignment=QtCore.Qt.AlignCenter)
 
-        top_line = QtWidgets.QHBoxLayout()
-        top_line.addWidget(self.back_button, alignment=QtCore.Qt.AlignRight)
-        top_line.addStretch()
-        top_line.addWidget(self.title)
-        top_line.addStretch()
-
         # csv table
         self.table = QtWidgets.QTableWidget()
         self.table.setColumnCount(3)
@@ -330,18 +333,21 @@ class DevicePage(QtWidgets.QWidget):
         ip_box.addRow("Private IP:", self.private_input)
         ip_box.addRow("Public IP:", self.public_input)
 
-        self.ip_button = QtWidgets.QPushButton("Use local IP")
+        self.ip_button = QtWidgets.QPushButton("Autofill IP")
         self.add_button = QtWidgets.QPushButton("Add device")
+        self.delete_button = QtWidgets.QPushButton("Remove device")
         self.refresh_button = QtWidgets.QPushButton("Refresh")
 
         buttons_line = QtWidgets.QHBoxLayout()
         buttons_line.addWidget(self.ip_button)
         buttons_line.addWidget(self.add_button)
+        buttons_line.addWidget(self.delete_button)
         buttons_line.addWidget(self.refresh_button)
 
         # page layout 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.addLayout(top_line)
+        layout.addWidget(self.back_button, alignment=QtCore.Qt.AlignRight)
+        layout.addWidget(self.title, alignment=QtCore.Qt.AlignCenter)
         layout.addWidget(self.table)
         layout.addWidget(self.local_label)
         layout.addLayout(ip_box)
@@ -443,8 +449,7 @@ class SettingsPage(QtWidgets.QWidget):
         self.back_button.setFixedSize(80, 30)
 
         self.top_line = QtWidgets.QHBoxLayout()
-        self.top_line.addWidget(self.back_button, alignment=QtCore.Qt.AlignLeft)
-        self.top_line.addStretch()
+        self.top_line.addWidget(self.back_button, alignment=QtCore.Qt.AlignRight)
 
         self.title = QtWidgets.QLabel("Settings", alignment=QtCore.Qt.AlignCenter)
 
@@ -503,19 +508,22 @@ class MainMenu(QtWidgets.QWidget):
 
         self.stacked_widget = stacked_widget
 
-        self.device_button = QtWidgets.QPushButton("Devices")
-        self.device_button.setFixedSize(80, 30)
         self.settings_button = QtWidgets.QPushButton("Settings")
         self.settings_button.setFixedSize(80, 30)
+        self.device_button = QtWidgets.QPushButton("Devices")
+        self.device_button.setFixedSize(80, 30)
+        self.help_button = QtWidgets.QPushButton("Help")
+        self.help_button.setFixedSize(80, 30)
 
         self.top_line = QtWidgets.QHBoxLayout()
-        self.top_line.addWidget(self.device_button, alignment=QtCore.Qt.AlignLeft)
         self.top_line.addStretch()
+        self.top_line.addWidget(self.help_button)
+        self.top_line.addWidget(self.device_button)
         self.top_line.addWidget(self.settings_button)
-        self.top_line.addStretch()
 
-        self.title = QtWidgets.QLabel("Select Mode", alignment=QtCore.Qt.AlignCenter)
+        self.title = QtWidgets.QLabel("RC-PC")
         self.title.setStyleSheet("font-size: 24px; margin-bottom: 20px;")
+        self.mode = QtWidgets.QLabel("Select Mode")
 
         # center buttons
         self.client_button = QtWidgets.QPushButton("Client")
@@ -523,13 +531,20 @@ class MainMenu(QtWidgets.QWidget):
         self.server_button = QtWidgets.QPushButton("Server")
         self.server_button.setFixedSize(200, 50)
 
+        # layout for center buttons
+        self.center_layout = QtWidgets.QVBoxLayout()
+        self.center_layout.addWidget(self.title, alignment=QtCore.Qt.AlignHCenter)
+        self.center_layout.addWidget(self.mode, alignment=QtCore.Qt.AlignHCenter)
+        self.center_layout.addWidget(self.client_button, alignment=QtCore.Qt.AlignHCenter)
+        self.center_layout.addWidget(self.server_button, alignment=QtCore.Qt.AlignHCenter)
+
         # page layout
         self.layout = QtWidgets.QVBoxLayout(self)
         self.layout.addLayout(self.top_line)
+        self.layout.addStretch()
         self.layout.setAlignment(QtCore.Qt.AlignCenter)
-        self.layout.addWidget(self.title)
-        self.layout.addWidget(self.client_button)
-        self.layout.addWidget(self.server_button)
+        self.layout.addLayout(self.center_layout)
+        self.layout.addStretch()
 
         # button presses
         self.client_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(1))
