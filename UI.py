@@ -305,14 +305,12 @@ class ServerPage(QtWidgets.QWidget):
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
-    # not implemented
     def stop_server(self):
-        QtWidgets.QMessageBox.information(
-            self,
-            "Stop Server",
-            "Stop server not implemented"
-        )
-        self.stop_button.setEnabled(False)     
+        server.stop_server()
+        self.status.setText("Server stopping...")
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+  
 
 
 # devices page

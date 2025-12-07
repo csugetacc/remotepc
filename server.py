@@ -26,6 +26,9 @@ screen_h = 1
 frame_w = 1
 frame_h = 1
 
+# track if the server is on 
+server_running = False
+
 
 # get screen frame to send
 def screen_grab(sct, scale, jpg_q):
@@ -161,7 +164,16 @@ def recv_file(control_conn, PSK, header: dict):
     print(f"Saved file to {path}")
 
 
+def stop_server():
+    global server_running
+    server_running = False
+
+
 def server_program(FPS, scale, jepg_q):
+
+    # set status
+    global server_running
+    server_running = True
 
     # load key
     PSK = encrypt.load_key()
@@ -169,6 +181,10 @@ def server_program(FPS, scale, jepg_q):
     # initalize sockets
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as control_socket, \
          socket.socket(socket.AF_INET, socket.SOCK_STREAM) as video_socket:
+
+        # adjust timeouts
+        control_socket.settimeout(1.0)
+        video_socket.settimeout(1.0)
 
         #control setup
         control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -180,18 +196,39 @@ def server_program(FPS, scale, jepg_q):
         video_socket.bind((HOST, VIDEO_PORT))
         video_socket.listen(1)
 
+
         # control connect
         print(f"Control listening on {HOST}:{CONTROL_PORT}")
-        control_conn, control_addr = control_socket.accept()
+        control_conn = None
 
-        print("Control connection from:", control_addr)
+        while server_running and control_conn is None:
+            try:
+                control_conn, control_addr = control_socket.accept()
+                print("Control connection from:", control_addr)
+            except socket.timeout:
+                continue
+
+        # exit loop if server stopped
+        if not server_running:
+            return
+
         threading.Thread(target=handle_mouse_control, args=(control_conn, PSK), daemon=True).start() # handle controls in seperate thread
 
         # video connect
         print(f"Video listening on {HOST}:{VIDEO_PORT}")
-        video_conn, video_addr = video_socket.accept()
+        video_conn = None
 
-        print("Video connection from:", video_addr)
+        while server_running and video_conn is None:
+            try:
+                video_conn, video_addr = video_socket.accept()
+                print("Video connection from:", video_addr)
+            except socket.timeout:
+                continue
+
+        # exit loop if server stopped
+        if not server_running:
+            return
+
         
         with video_conn:
             with mss.mss() as sct:
@@ -211,14 +248,18 @@ def server_program(FPS, scale, jepg_q):
                 screen_w, screen_h = screen_w, screen_h
                 frame_w, frame_h = frame_w, frame_h
 
-                while True:
+                while server_running:
+
                     t0 = time.time()
 
                     data = screen_grab(sct, scale, jepg_q)
                     if data is None:
                         continue
 
-                    encrypt.send_sealed(video_conn, PSK, data, aad=b"video")
+                    try:
+                        encrypt.send_sealed(video_conn, PSK, data, aad=b"video")
+                    except OSError:
+                        break
 
                     # throttle FPS
                     elapsed = time.time() - t0
