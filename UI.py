@@ -6,6 +6,8 @@ import socket
 
 from PySide6 import QtCore, QtWidgets, QtGui
 from pathlib import Path
+from urllib.request import urlopen
+
 
 import client
 import server
@@ -511,7 +513,11 @@ class DevicePage(QtWidgets.QWidget):
     # not implemented 
     @staticmethod
     def get_local_public_ip() -> str:
-        return 
+        try:
+            with urlopen("https://api.ipify.org", timeout=3) as resp:
+                return resp.read().decode("utf-8").strip()
+        except Exception:
+            return 
 
 
 class SettingsPage(QtWidgets.QWidget):
