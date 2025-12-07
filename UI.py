@@ -5,6 +5,7 @@ import csv
 import socket
 
 from PySide6 import QtCore, QtWidgets, QtGui
+from pathlib import Path
 
 import client
 import server
@@ -626,6 +627,26 @@ class MainMenu(QtWidgets.QWidget):
         self.server_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(2))
         self.device_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(3))
         self.settings_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(4))
+        self.help_button.clicked.connect(self.help_display)
+
+
+    def help_display(self):
+
+        help_file = Path("help.txt")
+
+        try:
+            text = help_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            text = "help.txt not found."
+        except Exception as e:
+            text = f"Error reading help.txt:\n{e}"
+
+        # help popup
+        text_box = QtWidgets.QMessageBox(self)
+        text_box.setWindowTitle("Help")
+        text_box.setText(text)
+        text_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+        text_box.exec()
 
 
 if __name__ == "__main__":
