@@ -374,6 +374,7 @@ class DevicePage(QtWidgets.QWidget):
         self.back_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
         self.ip_button.clicked.connect(self.fill_local_ips)
         self.add_button.clicked.connect(self.add_device)
+        self.delete_button.clicked.connect(self.delete_device)
         self.refresh_button.clicked.connect(self.load_devices)
 
         # initial load
@@ -429,6 +430,63 @@ class DevicePage(QtWidgets.QWidget):
         self.private_input.clear()
         self.public_input.clear()
         self.load_devices()
+
+    # delete device from hosts.csv
+    def delete_device(self):
+
+        # get selected name from menue
+        row = self.table.currentRow()
+
+        if row < 0:
+            QtWidgets.QMessageBox.warning(self, "No selection", "Select a device in the table to remove.")
+            return
+
+        name_item = self.table.item(row, 0)
+        if not name_item:
+            return
+
+        name = name_item.text().strip()
+
+        if not name:
+            QtWidgets.QMessageBox.warning(self, "Missing hostname", "Enter a hostname to remove.")
+            return
+
+        if not os.path.exists("hosts.csv"):
+            QtWidgets.QMessageBox.warning(self, "No hosts detected.")
+            return
+
+        kept_rows = []     # store rows to be kept
+        removed = False
+
+        # cycle through rows and mark for removal
+        with open("hosts.csv", newline="") as host_file:
+            reader = csv.DictReader(host_file)
+            fieldnames = reader.fieldnames or ["hostname", "privateip", "publicip"]
+
+            for row in reader:
+                if row.get("hostname", "").strip() == name:
+                    removed = True
+                else:
+                    kept_rows.append(row)
+
+        if not removed:
+            QtWidgets.QMessageBox.information(self, "Not found", f"No entry found with hostname '{name}'.")
+            return
+
+        # write back kept rows
+        with open("hosts.csv", "w", newline="") as host_file:
+            writer = csv.DictWriter(host_file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(kept_rows)
+
+        # refresh table
+        self.load_devices()
+        self.name_input.clear()
+        self.private_input.clear()
+        self.public_input.clear()
+
+        QtWidgets.QMessageBox.information(self, "Removed", f"Device '{name}' has been removed.")
+
 
     # populate ip fields
     def fill_local_ips(self):
