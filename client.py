@@ -5,12 +5,12 @@ import struct
 import csv
 import threading
 import json
+import os
+import encrypt
 
 from pynput.mouse import Listener as MouseListener, Button
 from pynput.keyboard import Listener as KeyboardListener, Key
 from PySide6 import QtCore, QtWidgets, QtGui
-
-import encrypt
 
 
 video_port = 5000
@@ -52,7 +52,7 @@ class ClientWorker(QtCore.QObject):
             self.video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.video_socket.connect((self.host, self.video_port))
 
-            self.statusText.emit("Connected. Press 'q' to quit.")
+            self.statusText.emit("Connected.")
 
             # main receive loop
             while self.client_running:
@@ -151,6 +151,49 @@ class ClientWorker(QtCore.QObject):
         self.send_command({'type': 'key_up', 'value': name})
 
 
+    # send files along the control socket
+    def send_file(self, path: str):
+
+        # make sure this is the correct socket
+        if not self.control_socket:
+            return
+
+        try:
+            # get file info
+            size = os.path.getsize(path)
+            name = os.path.basename(path)
+
+            # send file info 
+            encrypt.send_json(self.control_socket, self.PSK, {
+                "type": "file_start",
+                "name": name,
+                "size": size,
+            })
+
+            # send file in chunks
+            with open(path, "rb") as f:
+
+                while True:
+
+                    chunk = f.read(64 * 1024)
+
+                    # close transmission once finished
+                    if not chunk:
+                        break
+
+                    encrypt.send_sealed(self.control_socket, self.PSK, chunk, aad=b"file")
+
+            # indicate that the file has completed transmission
+            encrypt.send_json(self.control_socket, self.PSK, {
+                "type": "file_end",
+                "name": name,
+            })
+
+        # 'handel' file send has broken
+        except Exception as err:
+            print(f"Error sending file: {err}")
+
+
 # convert opencv frame to qt image 
 def frame_to_qimage(frame_bgr: np.ndarray) -> QtGui.QImage:
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -183,151 +226,3 @@ def getip(name, use_public: bool | None = None):
                 return private_ip or public_ip
 
     return None     # ip not found
-
-
-
-
-
-''' outdated
-def recvall(sock, n):
-    data = bytearray()
-    while len(data) < n:
-        packet = sock.recv(n - len(data))
-        if not packet:
-            return None
-        data.extend(packet)
-    return bytes(data)
-'''
-'''
-def client_program(hostname):
-
-    # get host ipv4
-    host = getip(hostname)  
-
-    # get passcode
-    PSK = encrypt.load_key()
-
-    # temporary catch for bad hostname 
-    if not host:
-        print("invalid host entered")
-        exit()
-
-    pressed_keys = set() # stores keystrokes to send
-
-    # initalize for mouse window acounting
-    window_dims = {'x': 0, 'y': 0, 'w': 1, 'h': 1}
-    frame_dims  = {'w': 1, 'h': 1}
-    state_lock = threading.Lock()
-
-    # start connections
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as control_socket, \
-         socket.socket(socket.AF_INET, socket.SOCK_STREAM) as video_socket:     
-
-        # mouse functions
-        def send_mouse(command):
-            try:
-                encrypt.send_json(control_socket, PSK, command)
-            except OSError:
-                print("OSError detected")
-                pass
-
-        def on_move(x, y):
-            # calculate for mouse in window
-            with state_lock:
-                wx, wy, ww, wh = window_dims['x'], window_dims['y'], window_dims['w'], window_dims['h']
-                fw, fh = frame_dims['w'], frame_dims['h']
-
-            frame_x = x - wx
-            frame_y = y - wy
-
-            if 0 <= frame_x < ww and 0 <= frame_y < wh:   # only send when in window 
-                # scale to frame resolution
-                adjusted_x = frame_x * (fw / float(ww))
-                adjusted_y = frame_y * (fh / float(wh))
-
-                send_mouse({'type': 'mouse_move', 'value': (int(adjusted_x), int(adjusted_y))})
-
-        def on_click(x, y, button, pressed):
-            if pressed:
-                send_mouse({'type': 'mouse_down', 'value': 'left' if button == Button.left else 'right'})
-            else:   # register click release
-                send_mouse({'type': 'mouse_up', 'value': 'left' if button == Button.left else 'right'})    
-
-        # keyboard functions
-        def key_to_name(key):
-            # assign char to key 
-            try:
-                if hasattr(key, 'char') and key.char is not None:
-                    return key.char
-            except AttributeError: # ignore non characters
-                pass
-            try:
-                return key.name  # get special keys name
-            except AttributeError:
-                return str(key)  # if all else fails turn key to string
-
-        def on_key_press(key):
-            name = key_to_name(key)
-            if name not in pressed_keys:    # only send once per press
-                pressed_keys.add(name)
-                send_mouse({'type': 'key_down', 'value': name})
-
-        def on_key_release(key):
-            name = key_to_name(key)
-            if name in pressed_keys:        # only delete once per release
-                pressed_keys.discard(name)
-            send_mouse({'type': 'key_up', 'value': name})
-
-
-        # start listners 
-        listener = MouseListener(on_move=on_move, on_click=on_click)
-        listener.start()
-        key_listener = KeyboardListener(on_press=on_key_press, on_release=on_key_release)
-        key_listener.start()
-        
-        # connect control port
-        print(f"Connecting to {host}:{control_port} ...")
-        control_socket.connect((host, control_port))
-
-        # video connection 
-        print(f"Connecting to {host}:{video_port} ...")
-        video_socket.connect((host, video_port))
-        print("Connected. Press 'q' to quit.")
-
-        # start window
-        cv2.namedWindow("Remote Screen", cv2.WINDOW_NORMAL) 
-
-        while True:          
-                
-            jpeg = encrypt.recv_open(video_socket, PSK, aad=b"video")
-            if jpeg is None:
-                print("Connection closed while receiving frame.")
-                break  # disconnected 
-
-            # display frame
-            arr = np.frombuffer(jpeg, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if frame is None:
-                continue
-                
-            cv2.imshow("Remote Screen", frame)
-
-            # get window dimensions for mouse calculations
-            h, w = frame.shape[:2]
-            with state_lock:
-                frame_dims['w'], frame_dims['h'] = w, h     # update frame values
-                try:
-                    wx, wy, ww, wh = cv2.getWindowImageRect("Remote Screen")
-                    window_dims.update({'x': wx, 'y': wy, 'w': ww, 'h': wh})    # update window values 
-                except Exception:
-                    pass
-
-            # close connection
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        # close out 
-        listener.stop()
-        key_listener.stop()
-        cv2.destroyAllWindows()
-'''

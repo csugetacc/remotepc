@@ -6,11 +6,12 @@ import struct
 import time 
 import json
 import threading 
+import os
+import encrypt
 
 from pynput.mouse import Button, Controller as MouseController
 from pynput.keyboard import Controller as KeyboardController, Key as Key
 
-import encrypt
 
 HOST = "0.0.0.0" # listen on all interfaces
 VIDEO_PORT = 5000   # send video on 5000
@@ -39,7 +40,7 @@ def screen_grab(sct, scale, jpg_q):
         frame = cv2.resize(frame, (int(w*scale), int(h*scale)), interpolation=cv2.INTER_AREA)
 
     # JPEG encode
-    ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
+    ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpg_q])
     if not ok:
         return None
     return enc.tobytes()
@@ -90,8 +91,27 @@ def handle_mouse_control(control_conn, PSK):
 
             if cmd is None: # catch bad recv 
                 break
-                
-            mouse_control(cmd)
+
+            # im going to put the file recieve commands in here, for now...
+
+            cmd_typ = cmd.get("type")
+
+            # process incoming file
+            if cmd_typ == "file_start":
+                recv_file(control_conn, PSK, cmd)
+
+            # process mouse / keyboard movements
+            elif cmd_typ in ("mouse_move", "mouse_down", "mouse_up", "key_down", "key_up"):
+                mouse_control(cmd)
+
+            # log file completion 
+            elif cmd_typ == "file_end":
+                print(f"File transfer complete: {cmd.get('name')}")
+
+            else:
+                # unknown command, theoretically this cant happen
+                print(f"Unknown control command: {cmd}")
+
     finally:
         control_conn.close() 
 
@@ -110,6 +130,35 @@ def handle_keyboard_control(name: str):
             pass
     # else treat as literal character
     return name
+
+
+def recv_file(control_conn, PSK, header: dict):
+
+    # get file info
+    filename = header.get("name", "received.bin")
+    size = int(header.get("size", 0))
+
+    # save location
+    os.makedirs("received_files", exist_ok=True)
+    path = os.path.join("received_files", filename)
+
+    remaining = size
+
+    with open(path, "wb") as f:
+        
+        while remaining > 0:
+
+            chunk = encrypt.recv_open(control_conn, PSK, aad=b"file")
+
+            # this should only be hit if the program closes prematurly
+            if chunk is None:
+                print("Connection closed while receiving file.")
+                break
+
+            f.write(chunk)
+            remaining -= len(chunk)
+
+    print(f"Saved file to {path}")
 
 
 def server_program(FPS, scale, jepg_q):

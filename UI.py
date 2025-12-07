@@ -79,6 +79,8 @@ class ClientPage(QtWidgets.QWidget):
         # button presses
         self.button.clicked.connect(self.start_client)
         self.back_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
+        self.transfer_file.clicked.connect(self.innitate_transfer)
+
 
     # runs client program in seperate thread
     def start_client(self):
@@ -240,6 +242,23 @@ class ClientPage(QtWidgets.QWidget):
             name = self.key_to_name(event)
             if name:
                 self.client_worker.key_release(name)
+
+
+    def innitate_transfer(self):
+
+        # ensure the client is connected to the server
+        if not hasattr(self, "client_worker") or not self.client_worker.control_socket:
+            QtWidgets.QMessageBox.warning(self, "Not connected", "You must connect to a host before transferring files.")
+            return
+
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select file to send", "", "All Files (*.*)")
+
+        # if user does not give input cancel
+        if not path:
+            return
+
+        # start file send process
+        self.client_worker.send_file(path)
 
 
 # page for running server function
