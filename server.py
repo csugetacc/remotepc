@@ -103,6 +103,12 @@ def handle_mouse_control(control_conn, PSK):
             if cmd_typ == "file_start":
                 recv_file(control_conn, PSK, cmd)
 
+            # request file from server
+            elif cmd_typ == "request_file":
+                path = cmd.get("path")
+                if path:
+                    send_file_to_client(control_conn, PSK, path)
+
             # process mouse / keyboard movements
             elif cmd_typ in ("mouse_move", "mouse_down", "mouse_up", "key_down", "key_up"):
                 mouse_control(cmd)
@@ -167,6 +173,50 @@ def recv_file(control_conn, PSK, header: dict):
 def stop_server():
     global server_running
     server_running = False
+
+
+# send files along the control socket
+def send_file_to_client(control_socket, PSK, path: str):
+
+    # make sure path is real
+    if not os.path.exists(path):
+        print(f"File not found: {path}")
+        return
+
+    try:
+        # get file info
+        size = os.path.getsize(path)
+        name = os.path.basename(path)
+
+        # send file info 
+        encrypt.send_json(control_socket, PSK, {
+            "type": "file_start",
+            "name": name,
+            "size": size,
+        })
+
+        # send file in chunks
+        with open(path, "rb") as f:
+
+            while True:
+
+                chunk = f.read(64 * 1024)
+
+                # close transmission once finished
+                if not chunk:
+                    break
+
+                encrypt.send_sealed(control_socket, PSK, chunk, aad=b"file")
+
+        # indicate that the file has completed transmission
+        encrypt.send_json(control_socket, PSK, {
+            "type": "file_end",
+            "name": name,
+        })
+
+    # 'handel' file send has broken
+    except Exception as err:
+        print(f"Error sending file: {err}")
 
 
 def server_program(FPS, scale, jepg_q):

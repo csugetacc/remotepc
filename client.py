@@ -54,6 +54,10 @@ class ClientWorker(QtCore.QObject):
 
             self.statusText.emit("Connected.")
 
+            # control thread recieves data from the server 
+            control_thread = threading.Thread(target=self.control_loop, daemon=True)
+            control_thread.start()
+
             # main receive loop
             while self.client_running:
                 jpeg = encrypt.recv_open(self.video_socket, self.PSK, aad=b"video")
@@ -152,7 +156,7 @@ class ClientWorker(QtCore.QObject):
 
 
     # send files along the control socket
-    def send_file(self, path: str):
+    def send_file_to_server(self, path: str):
 
         # make sure this is the correct socket
         if not self.control_socket:
@@ -192,6 +196,59 @@ class ClientWorker(QtCore.QObject):
         # 'handel' file send has broken
         except Exception as err:
             print(f"Error sending file: {err}")
+
+
+    def recv_file_from_server(self, header: dict):
+
+        # get file info
+        filename = header.get("name", "downloaded.bin")
+        size = int(header.get("size", 0))
+
+        # save location
+        os.makedirs("downloads", exist_ok=True)
+        path = os.path.join("downloads", filename)
+
+        remaining = size
+
+        with open(path, "wb") as f:
+
+            while remaining > 0 and self.client_running:
+
+                chunk = encrypt.recv_open(self.control_socket, self.PSK, aad=b"file")
+
+                # this should only be hit if the program closes prematurly
+                if chunk is None:
+                    print("Connection closed while receiving file.")
+                    break
+
+                f.write(chunk)
+                remaining -= len(chunk)
+
+        print(f"Saved file to {path}")
+
+    
+    def control_loop(self):
+        try:
+            while self.client_running:
+
+                cmd = encrypt.recv_json(self.control_socket, self.PSK)
+                if cmd is None:
+                    break
+
+                t = cmd.get("type")
+
+                # prepare to recieve file
+                if t == "file_start":
+                    self.recv_file_from_server(cmd)
+
+                # acknowledge file completion
+                elif t == "file_end":
+                    name = cmd.get("name")
+                    print(f"Download complete: {name}")
+
+        except Exception as e:
+            print(f"Control loop error: {e}")
+
 
 
 # convert opencv frame to qt image 

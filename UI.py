@@ -31,6 +31,7 @@ class ClientPage(QtWidgets.QWidget):
         self.set_host = QtWidgets.QLineEdit()
 
         self.transfer_file = QtWidgets.QPushButton("Transfer Files")
+        self.download_file = QtWidgets.QPushButton("Download Files")
 
         # public/private ip sellect
         self.ip_type_label = QtWidgets.QLabel("IP type: ")
@@ -63,8 +64,9 @@ class ClientPage(QtWidgets.QWidget):
         self.ip_type_line = QtWidgets.QHBoxLayout()
         self.ip_type_line.addWidget(self.ip_type_label)
         self.ip_type_line.addWidget(self.ip_type_menue)
-        self.ip_type_line.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))        
+        #self.ip_type_line.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))        
         self.ip_type_line.addWidget(self.transfer_file)    # shoving this here
+        self.ip_type_line.addWidget(self.download_file)    # not realy a ip line anymore
         # fix spacing of these items
         self.ip_type_line.setStretch(0, 0)
         self.ip_type_line.setStretch(1, 1)
@@ -83,6 +85,7 @@ class ClientPage(QtWidgets.QWidget):
         self.button.clicked.connect(self.start_client)
         self.back_button.clicked.connect(lambda: stacked_widget.setCurrentIndex(0))
         self.transfer_file.clicked.connect(self.innitate_transfer)
+        self.download_file.clicked.connect(self.innitate_download)
 
 
     # runs client program in seperate thread
@@ -246,12 +249,12 @@ class ClientPage(QtWidgets.QWidget):
             if name:
                 self.client_worker.key_release(name)
 
-
+    # client -> server
     def innitate_transfer(self):
 
         # ensure the client is connected to the server
         if not hasattr(self, "client_worker") or not self.client_worker.control_socket:
-            QtWidgets.QMessageBox.warning(self, "Not connected", "You must connect to a host before transferring files.")
+            QtWidgets.QMessageBox.warning(self, "Not connected", "You must connect to a host before sending files.")
             return
 
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select file to send", "", "All Files (*.*)")
@@ -261,7 +264,27 @@ class ClientPage(QtWidgets.QWidget):
             return
 
         # start file send process
-        self.client_worker.send_file(path)
+        self.client_worker.send_file_to_server(path)
+
+    # server -> client
+    def innitate_download(self):
+
+        # ensure the client is connected to the server
+        if not hasattr(self, "client_worker") or not self.client_worker.control_socket:
+            QtWidgets.QMessageBox.warning(self, "Not connected", "You must connect to a host before downloading files.")
+            return
+
+        # get path from user
+        path, ok = QtWidgets.QInputDialog.getText(self, "Request file", "Server file path:")
+
+        # if user does not give input cancel
+        if not ok or not path.strip():
+            return
+
+        self.client_worker.send_command({
+            "type": "request_file",
+            "path": path.strip(),
+        })
 
 
 # page for running server function
