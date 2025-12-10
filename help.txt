@@ -1,1 +1,16 @@
-help not implemented yet... good luck!
+The SERVER device is the one you are connecting to ie: Home desktop / workstation
+The CLIENT device is the one you are connecting from ie: laptop
+
+
+First time setup:
+	Step 1: add the server device to the ‘Devices’ menu of the client computer. See IP configuration for more information on IP addresses.
+	Step 2: navigate to the server menu on the server device and click ‘Start Server’ this will generate an encryption key ‘secret.key’ in the remotepc folder, put this key in the remotepc folder of the CLIENT device. [MAKE SURE THE SAME SECRET IS IN BOTH FOLDERS THE PROGRAM WILL NOT WORK IF THEY ARE DIFFERENT]
+	Step 3: navigate to the client menu, enter the name you gave the computer in ‘Devices’ into the ‘Host:’ input box, and click connect. This will open a connection to the server device, you will now be able to use the server device from the client device.
+
+
+IP configuration:
+For a connection to be made the program will need the private IP for connections on the same network and the public IP for connections from different networks. IP addresses for the local device are given in the devices menu for convenience; however keep in mind that these may be incorrect; public IP addresses can change if you are using a VPN and private IP addresses will change when changing networks.
+
+
+File transfer:
+The ‘Send Files’ option in the client menu will transfer files from the client device to the server device. The ‘Download Files’ option will download files from the server device to the client device.
