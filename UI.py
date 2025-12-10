@@ -30,7 +30,7 @@ class ClientPage(QtWidgets.QWidget):
         self.host_label = QtWidgets.QLabel("Host: ")
         self.set_host = QtWidgets.QLineEdit()
 
-        self.transfer_file = QtWidgets.QPushButton("Transfer Files")
+        self.transfer_file = QtWidgets.QPushButton("Send Files")
         self.download_file = QtWidgets.QPushButton("Download Files")
 
         # public/private ip sellect
@@ -184,6 +184,7 @@ class ClientPage(QtWidgets.QWidget):
     @QtCore.Slot(str)
     def video_box_status_text(self, text: str):
         if text:
+            self.video_box.clear()     # make sure the pixmap gets cleared
             self.video_box.setText(text)
 
 
@@ -193,6 +194,10 @@ class ClientPage(QtWidgets.QWidget):
         if self.client_thread.isRunning() and hasattr(self, "client_thread"):
             self.client_thread.quit()
             self.client_thread.wait(500)
+
+            # clear and display notification
+            self.video_box.clear()
+            self.video_box.setText("Client disconnected.")
 
     
     # remap special keys
@@ -294,6 +299,8 @@ class ServerPage(QtWidgets.QWidget):
 
         self.stacked_widget = stacked_widget
 
+        self.server_thread = None   # initalize early for tracking
+
         # buttons
         self.back_button = QtWidgets.QPushButton("Back")
         self.back_button.setFixedSize(80, 30)
@@ -332,11 +339,25 @@ class ServerPage(QtWidgets.QWidget):
         self.stop_button.setEnabled(True)
 
     def stop_server(self):
+
         server.stop_server()
         self.status.setText("Server stopping...")
+
+        # check if the server shutdown (after wait 100ms)
+        QtCore.QTimer.singleShot(100, self.check_server_stopped)
+
+        # swap presed button
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-  
+
+    # make sure the server has stopped
+    def check_server_stopped(self):
+
+        if self.server_thread.is_alive():
+            QtCore.QTimer.singleShot(1000, self.check_server_stopped)   # wait in between calls
+        else:
+            self.status.setText("Server is stopped.")
+            self.server_thread = None
 
 
 # devices page

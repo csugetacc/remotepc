@@ -62,6 +62,7 @@ class ClientWorker(QtCore.QObject):
             while self.client_running:
                 jpeg = encrypt.recv_open(self.video_socket, self.PSK, aad=b"video")
                 if jpeg is None:
+                    self.statusText.emit("Disconnected from server.")   # notify user of disconnect
                     break
                 arr = np.frombuffer(jpeg, dtype=np.uint8)
                 frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
