@@ -616,6 +616,8 @@ class SettingsPage(QtWidgets.QWidget):
     # update settings with user input
     def apply_settings(self):
 
+        global FPS, SCALE, JPEG_QUALITY # use global values
+
         # get user input 
         _, scale = self.resolution_options[self.resolution_menue.currentIndex()]
         fps = self.fps_spin.value()
